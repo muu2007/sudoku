@@ -3,16 +3,16 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, minimum-scale=1, maximum-scale=1">
-    <title>sudoku -v 0.1a(2023-12-26)</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>sudoku -v 0.1a(2025-01-21)</title>
 
     <!-- Load custom style sheet -->
-    <link rel="stylesheet" type="text/css" href="theme/love.css">
+	<link rel="stylesheet" type="text/css" href="https://rawgit.com/outboxcraft/beauter/master/beauter.min.css"/>
   </head>
   <body>
     <center>
       <div>
-        <h1>sudoku -v 0.1a(2023-12-26)</h1>
+<p id="header_sudoku"></p>
         <canvas id="loadingCanvas" oncontextmenu="event.preventDefault()" width="800" height="600"></canvas>
         <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
       </div>
@@ -104,8 +104,60 @@
     </script>
     <script type="text/javascript" src="game.js"></script>
     <script async type="text/javascript" src="love.js" onload="applicationLoad(this)"></script>
-    <footer>
-      <p>Built with <a href="https://github.com/Davidobot/love.js">love.js</a> <button onclick="goFullScreen();">Go Fullscreen</button><br>Hint: Reload the page if screen is blank</p>
-    </footer>
+
+      <p class=_alignCenter><button class="_small _ripple" onclick="goFullScreen();">Fullscreen</button></p>
+<style>body{color: #1a1a20; background-color: #f0f0f0;}</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300italic,700,700italic">
+<div class="row">
+<div class="off-2">
+<div class="col m8" style="background-color: #fffbe1">
+<p>数独です。</p>
+<div class="row">
+<div class="col m1-5 card _brown">
+<img alt="images/title.png" src="images/title.png" class="modalimg" id="77e4fc98-0ade-4ead-8ef9-80ec5fa18d6c" onclick="openimg(&quot;77e4fc98-0ade-4ead-8ef9-80ec5fa18d6c&quot;, &quot;00ee9c41-7309-4971-aefc-72204b45c0a3&quot;);">
+<div id="00ee9c41-7309-4971-aefc-72204b45c0a3" class="modal">
+<span class="-close">✖</span> <img class=modal-content>
+<div class="caption">
+
+</div>
+</div>
+</div>
+<div class="col m1-5 card _brown">
+<img alt="images/main.png" src="images/main.png" class="modalimg" id="c8533f5a-5337-44d8-a59f-0da842f76600" onclick="openimg(&quot;c8533f5a-5337-44d8-a59f-0da842f76600&quot;, &quot;8b6ca947-c265-4087-84f3-9d65032d90e9&quot;);">
+<div id="8b6ca947-c265-4087-84f3-9d65032d90e9" class="modal">
+<span class="-close">✖</span> <img class=modal-content>
+<div class="caption">
+
+</div>
+</div>
+</div>
+</div>
+<p><br></p>
+<h3 class="_nightblue" id="操作方法">操作方法</h3>
+<ul>
+<li>マウス左ボタンを押して置きたい数字の所に◯を合わせて離す。
+<ul>
+<li>長押しで消す。</li>
+</ul></li>
+</ul>
+<h2 class="_warning" id="download">Download</h2>
+<ul>
+<li>lastest:
+<ul>
+<li><a href="sudoku.exe">sudoku.exe</a></li>
+<li><a href="sudoku.love">sudoku.love</a></li>
+</ul></li>
+</ul>
+<h2 class="_danger" id="更新履歴">更新履歴</h2>
+<ul>
+<li>v0.1a</li>
+</ul>
+<h2 class="_success" id="license">License</h2>
+<p>Zlib/Libpng License.</p>
+</div>
+</div>
+</div>
+<script src="https://rawgit.com/outboxcraft/beauter/master/beauter.min.js"></script>
+
   </body>
-</html>
+</html>

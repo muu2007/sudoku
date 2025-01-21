@@ -2,21 +2,22 @@ import 'macros' as {$}
 _G.PROJECTNAME, _G.VERSION = $FILE\sub(1,-5), "0.1a(#{$DATE})"
 -- import 'utf8'
 import 'lib.lume'
-import 'utl' as :align, :play
+import 'utl' as :pos_in_box, :align, :play
 import 'lib.maid64' -- 改造して高解像度を初期値にした
-import 'color' as :hsv, :sweetie16
+import 'color' as --[[:hsv,]] :sweetie16
 -- import 'lib.gifcat' -- gifcat.luaもprojectrootに置く? 全部に?入れているので、ここ消すだけで使わなくなる
 import 'ui' as :Scene, :Overlay, :SelectBox, :SelectBoxScroll, :Watchdog--, :blur5x5_code
 import 'input' as :input, :SoftKeyboard
 import 'lib.tween' -- 改造してdelayを可能にした
 import '数独' as :solve, :generate--{solve0: solve, generate: generate}
 import 'sudoku_stagedata' as stagedata
-import 'lib.inspect'
+vudu = if DEBUGMODE then require 'lib.vudu' else nil
+inspect = if DEBUGMODE then require 'lib.inspect' else nil
 -- local *
 
 love.window.setTitle(PROJECTNAME .. ' - v' .. VERSION)
-love.window.setMode(512, 800, {resizable: true}) -- レトロ画面をコピーするだけならanti alias不要。gamepad描いているのでmsaaつけた
-maid64.setup(512, 800)
+love.window.setMode(600, 921, {resizable: true}) -- レトロ画面をコピーするだけならanti alias不要。gamepad描いているのでmsaaつけた
+maid64.setup(600, 921)
 love.mouse.getPosition0 = love.mouse.getPosition -- 保存
 love.mouse.getPosition = maid64.mouse.getPosition -- プログラム全体としてmaid64の座標系を使うことにする
 love.touch.getPosition0 or= love.touch.getPosition -- 保存
@@ -28,27 +29,39 @@ love.audio.setVolume(0.3)
 
 
 do -- load the savedata
-	savedata = if 'Web' != love.system.getOS() then lume.deserialize(love.filesystem.read(PROJECTNAME..'.save') or '{}') else {}
+	savedata = if love.filesystem.getInfo(PROJECTNAME..'.save') then lume.deserialize(love.filesystem.read(PROJECTNAME..'.save') or '{}') else {}
 	stagedata[i].cleartime = t for i, {cleartime: t} in ipairs savedata
 
 save = ->
-	if 'Web' == love.system.getOS() then return
 	love.filesystem.write(PROJECTNAME..'.save', lume.serialize([{cleartime: t} for {cleartime: t} in *stagedata]))
 
 
 class Game extends Scene
+	@Layout = do
+		s = align.div_h(align.enlarge({0,0,maid64.sizeX,maid64.sizeY}, -10, -10), {0.7, 2, 0.1, 1.3, 0.2, 19, 0.2, 1.3, 5})
+		s2 = align.div_v(s[2], {0.1, 5, 2, 3.5, 2, 3.5, 18})
+		{ toolbar: s[2]
+		back: s2[2]
+		solve: s2[4]
+		volume: s2[6]
+		time: align.right(s[4], 300)
+		field: s[6]
+		author: s[8]
+		}
 	new: (@id)=>
 		@field = [ [(if 0==c then {} else c) for c in *row] for row in *stagedata[id].field]
 		@keycursor = {1,1, visible: false} -- キーボード操作用
 		@time = 0 -- Resultでは止めたいのでstartとlove.timer.getTimeではダメ
 		super()
-		@keyboard = SoftKeyboard({'appback': {50, 50, 28, "◀", 60}, 'f9': {150, 30, 20, "解", 60}, 'm': {220, 30, 20, "音"}})
+		@keyboard = SoftKeyboard(SoftKeyboard.buildButtons{
+			'appback': {@@Layout.back[1]+idiv(@@Layout.back[3],2), @@Layout.back[2]+idiv(@@Layout.back[3],2), idiv(@@Layout.back[3], 2), "", 60},
+			'f9': {@@Layout.solve[1]+idiv(@@Layout.solve[3],2), @@Layout.solve[2]+idiv(@@Layout.solve[3],2), idiv(@@Layout.solve[3],2), ''--[[']] --[["解"]], 60},
+			'm': {@@Layout.volume[1]+idiv(@@Layout.volume[3],2), @@Layout.volume[2]+idiv(@@Layout.volume[3],2), idiv(@@Layout.volume[3],2), ''--[["音"]]}}, gr.newFlyweightFont($FONT2, 46))
 
-	@OX, @OY, @W, @H = 6, 130, 500, 500
 	getIndexPos: =>
 		x, y = love.mouse.getPosition()
-		if math.pos_in_box({x, y}, {@@OX, @@OY, @@W, @@H}) -- else では nil, nil が返る
-			lume.clamp(((x-@@OX) |>idiv @@W/9)+1, 1, 9), lume.clamp(((y-@@OY) |>idiv @@H/9)+1, 1, 9)
+		if pos_in_box({x, y}, @@Layout.field) -- else では nil, nil が返る
+			lume.clamp(((x-@@Layout.field[1]) |>idiv @@Layout.field[3]/9)+1, 1, 9), lume.clamp(((y-@@Layout.field[2]) |>idiv @@Layout.field[4]/9)+1, 1, 9)
 
 	iswin: =>
 		isvalid = (x, y)->
@@ -71,23 +84,23 @@ class Game extends Scene
 	update: (dt)=>
 		super(dt)
 		if @iswin()
-			stagedata[@id].cleartime = math.min(@time, stagedata[@id].cleartime or math.maxinteger)
+			stagedata[@id].cleartime = math.min(@time, stagedata[@id].cleartime or math.huge)
 			save()
 			@parent\setStageLabels?()
 			@@Result()\attach()
 		@time += dt
 		return love.timer.sleep(2/60) if input.idletime>0 --and 'battery' == (love.system.getPowerInfo()) -- 省エネモード
-		if ix, iy = @getIndexPos() -- 取れない場合は nil, nilを受け取る
+		if ix, iy := @getIndexPos() -- 取れない場合は nil, nilを受け取る
 			if input.MLBp() and 'table' == type @field[iy][ix]
 				x, y = love.mouse.getPosition()
 				@draggingbox = {ix, iy, 1, 1, value: 0, startpos: {x, y}, offset: if x < 88 then x elseif x > 512-56 then 144-(512-x) else 72}
 				@update = @update_dragging
 		@keyboard\update(dt)
 		-- -- ここからはキーボード操作
-		if d = input.arrowkeysp({{-1,0},{0,-1},{1,0},{0,1}}, 10)
+		if d := input.arrowkeysp({{-1,0}, {0,-1}, {1,0}, {0,1}}, 10)
 			@keycursor = {lume.clamp(@keycursor[1]+d[1], 1, 9), lume.clamp(@keycursor[2]+d[2], 1, 9), visible: true}
 		if input.Ap() and 'table' == type @field[@keycursor[2]][@keycursor[1]]
-			@draggingbox = {@keycursor[1], @keycursor[2], 1, 1, value: 0, startpos: {@@OX+(@keycursor[1]-.5)*@@W/9, @@OY+(@keycursor[2]-.5)*@@H/9}, offset: 72}
+			@draggingbox = {@keycursor[1], @keycursor[2], 1, 1, value: 0, startpos: {@@Layout.field[1]+(@keycursor[1]-.5)*@@Layout.field[3]/9, @@Layout.field[2]+(@keycursor[2]-.5)*@@Layout.field[4]/9}, offset: 72}
 			@keycursor.visible = true
 			@update = @update_dragging
 		if SoftKeyboard.counters.appback >= 60
@@ -104,7 +117,7 @@ class Game extends Scene
 		if input.MLB()
 			x, y = love.mouse.getPosition()
 			if @draggingbox.startpos[2] - y > 35
-				@draggingbox.value = lume.clamp(math.floor((@draggingbox.offset-(@draggingbox.startpos[1]-x))/16)+1, 1, 9)
+				@draggingbox.value = lume.clamp(math.floor((@draggingbox.offset-(@draggingbox.startpos[1]-x))/20)+1, 1, 9)
 			else
 				@draggingbox.value = 0
 			if @_static_old_value != @draggingbox.value
@@ -129,7 +142,7 @@ class Game extends Scene
 
 	keypressed: (key, _scancode, _isrepeat)=>
 		switch key
-			-- when 'appback' then @detach()
+			when 'appback' then SoftKeyboard.counters.appback += 1 --@detach()
 			-- when 'f9'
 			-- 	ss = solve([lume.clone(row) for row in *stagedata[@id].field])
 			-- 	@field = [ [(if c>0 then c else {ss[y][x]}) for x, c in ipairs row] for y, row in ipairs stagedata[@id].field]
@@ -137,47 +150,48 @@ class Game extends Scene
 			when 'm' then love.audio.toggleMute()
 
 	draw: =>
-		aw, ah = @@W/9, @@H/9
+		ox, oy, aw, ah = @@Layout.field[1], @@Layout.field[2], @@Layout.field[3]/9, @@Layout.field[4]/9
 		gr.clear(gr.uipalette.base)
 		if @update == @update_dragging
-			gr.rectangle(gr.setColor(gr.uipalette.base2) or 'fill', @@OX+aw*(@draggingbox[1]-1), @@OY+aw*(@draggingbox[2]-1), aw, ah)
+			gr.rectangle(gr.setColor(gr.uipalette.base2) or 'fill', ox+aw*(@draggingbox[1]-1), oy+aw*(@draggingbox[2]-1), aw, ah)
 		gr.setColor(gr.uipalette.text)
 		for w, s in ipairs {{1, 2, 4, 5, 7, 8}, {3, 6}, {0, 9}}
 			gr.setLineWidth(w)
-			gr.line(@@OX, @@OY+y*@@H/9, @@OX+@@W, @@OY+y*@@H/9) for y in *s
-			gr.line(@@OX+x*@@W/9, @@OY, @@OX+x*@@W/9, @@OY+@@H) for x in *s
+			gr.line(ox, oy+y*ah, ox+@@Layout.field[3], oy+y*ah) for y in *s
+			gr.line(ox+x*aw, oy, ox+x*aw, oy+@@Layout.field[4]) for x in *s
 		gr.setFont(gr.newFlyweightFont($FONT1, 30))
 		for y, row in ipairs @field
 			for x, c in ipairs row
 				if 'number' == type c
-					gr.print_center(gr.setColor(gr.uipalette.text) or gr.setFont(gr.newFlyweightFont($FONT1, 30)) or c, {@@OX+aw*(x-1), @@OY+ah*(y-1), aw, ah})
+					gr.print_center(gr.setColor(gr.uipalette.text) or gr.setFont(gr.newFlyweightFont($FONT1, 30)) or c, {ox+aw*(x-1), oy+ah*(y-1), aw, ah})
 				else
 					switch #c
 						when 0 then lume.noop() -- continue でもいけた
-						when 1 then gr.print_center(gr.setColor(gr.uipalette.selected) or gr.setFont(gr.newFlyweightFont($FONT1, 30)) or c[1], {@@OX+aw*(x-1), @@OY+ah*(y-1), aw, ah})
-						else        gr.print_center(gr.setColor(gr.uipalette.selected) or gr.setFont(gr.newFlyweightFont($FONT1, 18)) or lume.reduce(c,(a,b)->a..b), {@@OX+aw*(x-1), @@OY+ah*(y-1), aw, ah/2})
-		if @keycursor.visible then gr.rectangle(gr.setColor(gr.uipalette.text) or 'line', @@OX+aw*(@keycursor[1]-1)+4, @@OY+ah*(@keycursor[2]-1)+4, aw-8, ah-8)
-		gr.printf(gr.setColor(gr.uipalette.text) or gr.setFont(gr.newFlyweightFont($FONT1)) or "%s %02d:%02d"\format(L'Time', @time |>idiv(60), @time % 60), @@OX, @@OY-36, @@W, 'right') -- :stopwatch: \u{23F1}
-		gr.printf(L'author'..' '..text, @@OX, @@OY+@@H+6, @@W, 'right') if text = stagedata[@id].author
+						when 1 then gr.print_center(gr.setColor(gr.uipalette.selected) or gr.setFont(gr.newFlyweightFont($FONT1, 30)) or c[1], {ox+aw*(x-1), oy+ah*(y-1), aw, ah})
+						else        gr.print_center(gr.setColor(gr.uipalette.selected) or gr.setFont(gr.newFlyweightFont($FONT1, 18)) or lume.reduce(c,(a,b)->a..b), {ox+aw*(x-1), oy+ah*(y-1), aw, ah/2})
+		if @keycursor.visible then gr.rectangle(gr.setColor(gr.uipalette.text) or 'line', ox+aw*(@keycursor[1]-1)+4, oy+ah*(@keycursor[2]-1)+4, aw-8, ah-8)
+		gr.printf(gr.setColor(gr.uipalette.text) or gr.setFont(gr.newFlyweightFont($FONT1)) or "%s %02d:%02d"\format(L'Time', @time |>idiv(60), @time % 60), @@Layout.time[1], @@Layout.time[2], @@Layout.time[3], 'right') -- :stopwatch: \u{23F1}
+		gr.printf(L'author'..' '..text, @@Layout.author[1], @@Layout.author[2], @@Layout.author[3], 'right') if text := stagedata[@id].author
 		-- gr.setColor(gr.uipalette.text
 		@keyboard\draw()
-		if 0 == love.audio.getVolume() then gr.print(gr.setFont(gr.newFlyweightFont($FONT2)) or gr.setColor(gr.uipalette.red) or '\u{1f6ab}', @keyboard.buttons.m[1]-25, @keyboard.buttons.m[2]-25)
+		if 0 == love.audio.getVolume() then gr.print(gr.setFont(gr.newFlyweightFont($FONT2)) or gr.setColor(gr.uipalette.red) or '', @@Layout.volume[1]+32, @@Layout.volume[2])
 		if @update == @update_dragging
 			mx, my = love.mouse.getPosition()
 			gr.circle(gr.setColor(gr.uipalette.selected) or 'line', mx, my-55, 10)
 			-- box = {@@OX+aw*(@draggingbox[1]-1)-@draggingbox.offset, @@OY+aw*(@draggingbox[2]-1)-80, aw+100, 30}
-			box = {@draggingbox.startpos[1]-@draggingbox.offset, @draggingbox.startpos[2]-120, 144--[[aw+100]], 30}
+			box = {@draggingbox.startpos[1]-@draggingbox.offset, @draggingbox.startpos[2]-120, 20*9--[[aw+100]], 40}
 			gr.roundrect10(gr.setColor(gr.uipalette.base2) or 'fill', unpack box)
 			gr.setScissor(unpack box)
 			gr.setFont(gr.newFlyweightFont($FONT1))
 			for i=1,9
 				gr.setColor(if @draggingbox.value == i then gr.uipalette.selected else gr.uipalette.text)
-				gr.print(i, box[1]+(i-1)*16, box[2])
+				gr.print(i, box[1]+(i-1)*20, box[2])
 			gr.setScissor()
+		-- gr.rectangle('line', unpack b) for b in *{@@Layout.toolbar, @@Layout.time, @@Layout.field, @@Layout.author}
 
 	class @CancelWave extends Overlay
 		new: (x, y)=>
-			@box = {Game.OX+(x-1)*Game.W/9, Game.OY+(y-1)*Game.H/9, Game.W/9, Game.H/9}
+			@box = {Game.Layout.field[1]+(x-1)*Game.Layout.field[3]/9, Game.Layout.field[2]+(y-1)*Game.Layout.field[4]/9, Game.Layout.field[3]/9, Game.Layout.field[4]/9}
 			@color = {...gr.uipalette.selected, [4]: .7}
 			@tween = tween.new(.35, @, {box: align.enlarge(@box, 25), color: {...gr.uipalette.selected,[4]:0}}, 'outQuad')
 			super()
@@ -191,7 +205,7 @@ class Game extends Scene
 
 	class @Result extends SelectBox
 		new: =>
-			super({{text: '', box: {30, 0, 452, 300}, command: ()->@parent\detach(), state4index: {} }})
+			super({{text: '', box: {idiv(maid64.sizeX-460, 2), 0, 460, 300}, command: ()->@parent\detach(), state4index: {} }})
 			play 'assets/sounds/効果音ラボ/決定ボタンを押す21.mp3'
 		-- predrawback: =>
 		-- 	gr.setShader(blur5x5shader)
@@ -202,7 +216,7 @@ class Game extends Scene
 			-- c0, _ = gr.getCanvas(), gr.setCanvas()
 			-- gr.rectangle(gr.setColor(0,0,0,.1) or 'fill', 0, 0, gr.getWidth(), gr.getHeight())
 			-- gr.setCanvas(c0)
-			@_tween1 or= tween.new(.5, @buttons[1].box, {30, 200, 452, 300} ) -- static変数っぽくインスタンス変数を使う。draw内だけでアニメーション
+			@_tween1 or= tween.new(.5, @buttons[1].box, {[2]: 200} ) -- static変数っぽくインスタンス変数を使う。draw内だけでアニメーション
 			@_tween1\update(1/60)
 			-- gr.rectangle(gr.setColor(gr.uipalette.base) or 'fill', unpack @buttons[1].box)
 			-- gr.rectangle(gr.setColor(hsv(love.timer.getTime()*3, .8, .8)) or 'line', unpack @buttons[1].box)
@@ -285,12 +299,18 @@ class Title extends SelectBox
 				love.keypressed('appback')
 
 class Title2 extends SelectBox
+	@Layout = do
+		s = align.div_h(align.enlarge({0, 0, maid64.sizeX, maid64.sizeY}, -20, -10), {1, 4, 2, 3, 15})
+		{
+		title: s[2]
+		levels: align.div_h(s[4], 2) |> (=> [align.enlarge(b, -4, -4) for b in *{...align.div_v(@[1], 3), ...align.div_v(@[2], 3)}])
+		}
 	new: =>
-		boxes = do
-			s = align.div_h({16, 200, maid64.sizeX-32, 100}, 2)
-			[align.enlarge(b, -4, -4) for b in *{...align.div_v(s[1], 3), ...align.div_v(s[2], 3)}]
-		super(@@.buildButtons({'Level1', 'Level2', 'Level3', 'Level4', 'Level5', 'Level6'}, boxes, {(->@generate(30)), (->@generate(40)), (->@generate(45)), (->@generate(50)), (->@generate(55)), (->@generate(58)) }))
+		super(@@.buildButtons({L'Level'..1, L'Level'..2, L'Level'..3, L'Level'..4, L'Level'..5, L'Level'..6}, @@Layout.levels, {(->@generate(30)), (->@generate(40)), (->@generate(45)), (->@generate(50)), (->@generate(55)), (->@generate(58)) }))
+		@font = gr.newFlyweightFont($FONT1)--, 40)
 	update: (dt)=>
+		-- print dt
+		-- vudu?.graphics.drawText({0,0,0}, 0, 20, 20, 2^vudu.timeScale)
 		super(dt)
 		-- if nil == love.window.fullscreen_offset_x and nil == love.window.fullscreen_offset_y and love.window.getFullscreen() and 'Web' == love.system.getOS()
 		-- 	w, h = gr.getDimensions()
@@ -299,39 +319,50 @@ class Title2 extends SelectBox
 		-- 	else                love.window.fullscreen_offset_y = -(sh - h) / 2
 		-- elseif not love.window.getFullscreen()
 		-- 	love.window.fullscreen_offset_x, love.window.fullscreen_offset_y = nil, nil
+-- 		vudu?.graphics.drawText {0,0,0}, 0, 200, 400, "#{love.system.getOS()} #{if love.window.getFullscreen() then 'fullscreen' else 'not fullscreen'}
+-- Desktop: #{love.window.getDesktopDimensions()} #{select 2, love.window.getDesktopDimensions()}
+-- Window : #{gr.getWidth()}, #{gr.getHeight()}
+-- Original: #{love.mouse.getX()}, #{love.mouse.getY()}
+-- Scaled:  #{love.mouse.getPosition()}, #{select 2, love.mouse.getPosition()}
+-- Offset: #{love.window.fullscreen_offset_x}, #{love.window.fullscreen_offset_y}", 20, 400
 
 	generate: (n)=>
 		with Game(1)
 			.field = [ [(if c>0 then c else {})for c in *row] for row in *generate(n)]
 			\attach()
 	draw: =>
-		gr.print(gr.setColor(gr.uipalette.text) or gr.setFont(gr.newFlyweightFont($FONT1, 100)) or '数独', 140, 20)
-		gr.setFont(gr.newFlyweightFont($FONT1), 40)
+		gr.clear(gr.uipalette.base)
+		gr.print_center(gr.setColor(gr.uipalette.text) or gr.setFont(gr.newFlyweightFont($FONT1, 120)) or '数独', @@Layout.title)--140, 20)
 		super()
-		gr.print "#{love.system.getOS()} #{if love.window.getFullscreen() then 'fullscreen' else 'not fullscreen'}
-Desktop: #{love.window.getDesktopDimensions()} #{select 2, love.window.getDesktopDimensions()}
-Window : #{gr.getWidth()}, #{gr.getHeight()}
-Original: #{love.mouse.getX()}, #{love.mouse.getY()}
-Scaled:  #{love.mouse.getPosition()}, #{select 2, love.mouse.getPosition()}
-Offset: #{love.window.fullscreen_offset_x}, #{love.window.fullscreen_offset_y}", 20, 400
+		-- [gr.rectangle('line', unpack b) for b in * {@@Layout.title}]
 
 love.draw = -> -- 省エネモード(アニメーションの毎にinput.idletime=0を挟まなければいけないのでGameシーンのみに限定する)
 	self = Scene.current
-	return love.draw1() if @@__name != 'Game' or input.idletime < 0.1 --: or 'battery' != (love.system.getPowerInfo())
+	if @@__name != 'Game' or input.idletime < 0.1 --[[ or 'battery' != (love.system.getPowerInfo())]] then return love.draw1()
 	maid64.clearBG()
 	-- if @time
 	gr.setCanvas(maid64.canvas) -- 時計の部分だけ更新
-	gr.rectangle(gr.setColor(gr.uipalette.base) or 'fill', @@OX+300, @@OY-36, 500-300, 30)
-	gr.printf(gr.setFont(gr.newFlyweightFont($FONT1)) or gr.setColor(gr.uipalette.text) or"%s %02d:%02d"\format(L'Time', @time |>idiv(60), @time % 60), @@OX, @@OY-36, 500, 'right')
+	gr.rectangle(gr.setColor(gr.uipalette.base) or 'fill', unpack Game.Layout.time)
+	gr.printf(gr.setFont(gr.newFlyweightFont($FONT1)) or gr.setColor(gr.uipalette.text) or"%s %02d:%02d"\format(L'Time', @time |>idiv(60), @time % 60), Game.Layout.time[1], Game.Layout.time[2], Game.Layout.time[3], 'right')
 	maid64.finish()
+	gr.reset()
+
+
+-- if DEBUGMODE
+-- 	return {
+-- 		postYue: ->
+-- 			print 'postYue'
+-- 	}
 
 
 love.load = ->
+	vudu?.initialize()
+	vudu?.initializeDefaultHotkeys()
 	Title2()\attach()
 
 	if DEBUGMODE -- hotswap
 		Watchdog{
-			"#{$FILE}": -> transpile("#{$FILE}", 'main.lua')
+			"#{$FILE}": -> Watchdog.transpile("#{$FILE}", 'main.lua')
 			...Watchdog.InitialTargets}
 	if DEBUGMODE -- build
 		-- os.execute 'rustc -C opt-level=3 --crate-type=cdylib ray.rs' -- android(32bit?)用
@@ -339,6 +370,43 @@ love.load = ->
 		-- os.execute 'zig build-lib -dynamic -target arm-linux-gnueabi ray.zig' -- android(32bit?)用
 		-- os.execute 'zig build-lib -dynamic -target x86_64-windows ray.zig' -- Windows用
 		love.thread.newThread([[
-_G.PROJECTNAME, _G.VERSION = ...
-require('distribute').build{'sudoku_stagedata.lua', '数独.lua'}
-]])\start(PROJECTNAME, VERSION) -- 遅いので別スレッドにした。utlからlume.luaへ書き写したものあり。一行の時ファイル名複数行の時コードと判断してるようだ
+_G.PROJECTNAME, _G.VERSION, description = ...
+local distribute = require('distribute')
+distribute.build({'sudoku_stagedata.lua', '数独.lua'})
+distribute.modify_index_html(require('lib.os_capture').capture('echo \''..description..'\' | pandoc -f markdown -t html'))
+]])\start PROJECTNAME, VERSION, [[
+
+<style>body{color: #1a1a20; background-color: #f0f0f0;}</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300italic,700,700italic">
+<div class=row><div class="off-2"><div class="col m8" style="background-color: #fffbe1">
+
+数独です。
+
+<div class=row>
+<div class="col m1-5 card _brown">]]..require('distribute').thumbnail('images/title.png')..[[</div>
+<div class="col m1-5 card _brown">]]..require('distribute').thumbnail('images/main.png')..[[</div>
+</div>
+<br>
+
+### 操作方法{class=_nightblue}
+
+- マウス左ボタンを押して置きたい数字の所に◯を合わせて離す。
+  - 長押しで消す。
+
+## Download{class=_warning}
+
+- lastest:
+  - [sudoku.exe](sudoku.exe)
+  - [sudoku.love](sudoku.love)
+
+## 更新履歴{class=_danger}
+
+- v0.1a 
+
+## License{class=_success}
+
+Zlib/Libpng License.
+
+</div></div></div>
+<script src="https://rawgit.com/outboxcraft/beauter/master/beauter.min.js"></script>
+]] -- 遅いので別スレッドにした。utlからlume.luaへ書き写したものあり。一行の時ファイル名複数行の時コードと判断してるようだ
